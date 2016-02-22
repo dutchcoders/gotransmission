@@ -5,15 +5,17 @@ package transmission
 import (
 	"bytes"
 	"encoding/json"
-	"fmt"
 	"io"
 	"io/ioutil"
 	"net/http"
-	"os"
+
+	"github.com/kr/pretty"
 )
 
+type Status uint64
+
 const (
-	StatusStopped = iota
+	StatusStopped Status = iota
 	StatusCheckWait
 	StatusCheck
 	StatusDownloadWait
@@ -23,6 +25,7 @@ const (
 )
 
 type TorrentGetRequest struct {
+	IDs    []int    `json:"ids,omitempty"`
 	Fields []string `json:"fields,omitempty"`
 }
 
@@ -40,8 +43,8 @@ type TorrentStopRequest struct {
 
 type TorrentSetRequest struct {
 	IDs           []int `json:"ids,omitempty"`
-	FilesWanted   []int `json:"files-wanted,omitempty"`
-	FilesUnwanted []int `json:"files-unwanted,omitempty"`
+	FilesWanted   []int `json:"files-wanted"`
+	FilesUnwanted []int `json:"files-unwanted"`
 }
 
 type TorrentRemoveRequest struct {
@@ -58,30 +61,101 @@ type Torrent struct {
 		Name           string `json:"name"`
 	} `json:"files"`
 	HaveValid    int64         `json:"haveValid"`
-	Id           int64         `json:"id"`
+	ID           int64         `json:"id"`
 	IsFinished   bool          `json:"isFinished"`
 	Name         string        `json:"name"`
 	Peers        []interface{} `json:"peers"`
 	PercentDone  float64       `json:"percentDone"`
 	RateDownload int64         `json:"rateDownload"`
 	RateUpload   int64         `json:"rateUpload"`
-	Status       int64         `json:"status"`
+	Status       Status        `json:"status"`
 	TotalSize    int64         `json:"totalSize"`
 }
 
-type TorrentPutRequest struct {
+type TorrentAddRequest struct {
 	Filename string `json:"filename,omitempty"`
 }
 
-type TorrentPutResponse struct {
+type TorrentAddResponse struct {
 	TorrentAdded struct {
-		Hash string  `json:"hashString"`
-		ID   float64 `json:"id"`
-		Name string  `json:"name"`
+		Hash string `json:"hashString"`
+		ID   int    `json:"id"`
+		Name string `json:"name"`
 	} `json:"torrent-added"`
 }
 
-func (c *transmission) NewRequest(method string, arguments interface{}) (*http.Request, error) {
+func (t *Transmission) Add(d TorrentAddRequest) (*TorrentAddResponse, error) {
+	r, err := t.NewRequest("torrent-add", d)
+	if err != nil {
+		return nil, err
+	}
+
+	var resp TorrentAddResponse
+	err = t.Do(r, &resp)
+	return &resp, err
+}
+
+func (t *Transmission) Get(d TorrentGetRequest) (*TorrentGetResponse, error) {
+	r, err := t.NewRequest("torrent-get", d)
+	if err != nil {
+		return nil, err
+	}
+
+	var resp TorrentGetResponse
+	err = t.Do(r, &resp)
+	return &resp, err
+}
+
+func (t *Transmission) Set(d TorrentSetRequest) error {
+	r, err := t.NewRequest("torrent-set", d)
+	if err != nil {
+		return err
+	}
+
+	var v interface{}
+	defer func() {
+		pretty.Print(v)
+	}()
+
+	return t.Do(r, &v)
+}
+
+func (t *Transmission) Remove(d TorrentRemoveRequest) error {
+	r, err := t.NewRequest("torrent-remove", d)
+	if err != nil {
+		return err
+	}
+
+	return t.Do(r, nil)
+}
+
+func (t *Transmission) Stop(ids ...int) error {
+	d := TorrentStopRequest{
+		IDs: ids,
+	}
+
+	r, err := t.NewRequest("torrent-stop", d)
+	if err != nil {
+		return err
+	}
+
+	return t.Do(r, nil)
+}
+
+func (t *Transmission) StartNow(ids ...int) error {
+	d := TorrentStartNowRequest{
+		IDs: ids,
+	}
+
+	r, err := t.NewRequest("torrent-start-now", d)
+	if err != nil {
+		return err
+	}
+
+	return t.Do(r, nil)
+}
+
+func (c *Transmission) NewRequest(method string, arguments interface{}) (*http.Request, error) {
 	body := struct {
 		Arguments interface{} `json:"arguments"`
 		Method    string      `json:"method"`
@@ -106,14 +180,14 @@ func (c *transmission) NewRequest(method string, arguments interface{}) (*http.R
 	return req, nil
 }
 
-type transmission struct {
+type Transmission struct {
 	client         *http.Client
 	url            string
 	transmissionId string
 }
 
-func New(url string) *transmission {
-	return &transmission{
+func New(url string) *Transmission {
+	return &Transmission{
 		client: http.DefaultClient,
 		url:    url,
 	}
@@ -132,7 +206,7 @@ type transmissionResponse struct {
 	Arguments *json.RawMessage `json:"arguments"`
 }
 
-func (t *transmission) do(req *http.Request) (*transmissionResponse, error) {
+func (t *Transmission) do(req *http.Request) (*transmissionResponse, error) {
 	b, err := ioutil.ReadAll(req.Body)
 	if err != nil {
 		return nil, err
@@ -159,7 +233,7 @@ func (t *transmission) do(req *http.Request) (*transmissionResponse, error) {
 
 		dr := transmissionResponse{}
 
-		r := io.TeeReader(resp.Body, os.Stderr)
+		r := resp.Body // io.TeeReader(resp.Body, os.Stderr)
 
 		err = json.NewDecoder(r).Decode(&dr)
 		if err != nil {
@@ -167,7 +241,6 @@ func (t *transmission) do(req *http.Request) (*transmissionResponse, error) {
 		}
 
 		if dr.Result != "success" {
-			fmt.Printf("%#v", dr)
 			return &dr, &Error{
 				Result: dr.Result,
 			}
@@ -177,7 +250,7 @@ func (t *transmission) do(req *http.Request) (*transmissionResponse, error) {
 	}
 }
 
-func (t *transmission) Do(req *http.Request, v interface{}) error {
+func (t *Transmission) Do(req *http.Request, v interface{}) error {
 	dr, err := t.do(req)
 	if err != nil {
 		return err
