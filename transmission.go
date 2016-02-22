@@ -60,16 +60,18 @@ type Torrent struct {
 		Length         int64  `json:"length"`
 		Name           string `json:"name"`
 	} `json:"files"`
-	HaveValid    int64         `json:"haveValid"`
-	ID           int64         `json:"id"`
-	IsFinished   bool          `json:"isFinished"`
-	Name         string        `json:"name"`
-	Peers        []interface{} `json:"peers"`
-	PercentDone  float64       `json:"percentDone"`
-	RateDownload int64         `json:"rateDownload"`
-	RateUpload   int64         `json:"rateUpload"`
-	Status       Status        `json:"status"`
-	TotalSize    int64         `json:"totalSize"`
+	HaveValid               int64   `json:"haveValid"`
+	ID                      int64   `json:"id"`
+	IsFinished              bool    `json:"isFinished"`
+	Name                    string  `json:"name"`
+	Peers                   []Peer  `json:"peers"`
+	PercentDone             float64 `json:"percentDone"`
+	RateDownload            int64   `json:"rateDownload"`
+	RateUpload              int64   `json:"rateUpload"`
+	Status                  Status  `json:"status"`
+	TotalSize               int64   `json:"totalSize"`
+	MetadataPercentComplete float64 `json:"metadataPercentComplete"`
+	Hash                    string  `json:"hashString"`
 }
 
 type TorrentAddRequest struct {
@@ -82,6 +84,24 @@ type TorrentAddResponse struct {
 		ID   int    `json:"id"`
 		Name string `json:"name"`
 	} `json:"torrent-added"`
+}
+
+type Peer struct {
+	IsEncrypted        bool    `json:"isEncrypted"`
+	PeerIsInterested   bool    `json:"peerIsInterested"`
+	ClientIsInterested bool    `json:"clientIsInterested"`
+	ClientName         string  `json:"clientName"`
+	IsDownloadingFrom  bool    `json:"isDownloadingFrom"`
+	IsIncoming         bool    `json:"isIncoming"`
+	IsUploadingTo      bool    `json:"isUploadingTo"`
+	Port               int     `json:"port"`
+	Progress           float64 `json:"progress"`
+	RateToPeer         float64 `json:"rateToPeer"`
+	Flag               string  `json:"flagStr"`
+	Address            string  `json:"address"`
+	ClientIsChoked     bool    `json:"clientIsChoked"`
+	PeerIsChoked       bool    `json:"peerIsChoked"`
+	IsUTP              bool    `json:"isUTP"`
 }
 
 func (t *Transmission) Add(d TorrentAddRequest) (*TorrentAddResponse, error) {
